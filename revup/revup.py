@@ -196,6 +196,14 @@ async def github_connection(
             f"the same repo as the remote {args.remote_info}\n"
         )
 
+    if not args.github_oauth:
+        raise RuntimeError(
+            "No Github OAuth token configured!"
+            "Make one at https://github.com/settings/tokens/new"
+            "(revup needs full repo permissions)"
+            "then set it with `revup config revup.github_oauth`"
+        )
+
     github_ep = github_real.RealGitHubEndpoint(
         oauth_token=args.github_oauth, proxy=args.proxy, github_url=args.github_url
     )
@@ -221,6 +229,10 @@ async def main() -> int:
         add_help=False,
     )
     amend_parser = subparsers.add_parser("amend", aliases=["commit"], add_help=False)
+    config_parser = subparsers.add_parser(
+        "config",
+        add_help=False,
+    )
 
     for p in [upload_parser, restack_parser, amend_parser]:
         # Some args are used by both upload and restack
@@ -264,6 +276,12 @@ async def main() -> int:
     cherry_pick_parser.add_argument("--help", "-h", action=HelpAction, nargs=0)
     cherry_pick_parser.add_argument("branch", nargs=1)
     cherry_pick_parser.add_argument("--base-branch", "-b")
+
+    config_parser.add_argument("--help", "-h", action=HelpAction, nargs=0)
+    config_parser.add_argument("command", nargs=1)
+    config_parser.add_argument("flag", nargs=1)
+    config_parser.add_argument("value", nargs=1)
+    config_parser.add_argument("--repo", "-r")
 
     toolkit_parser = subparsers.add_parser(
         "toolkit", description="Test various subfunctionalities."
@@ -311,6 +329,8 @@ async def main() -> int:
     args = revup_parser.parse_args()
 
     conf = await get_config()
+    if args.cmd == "config":
+        return config.config_main(conf, args)
 
     for p in [revup_parser, amend_parser, cherry_pick_parser, restack_parser, upload_parser]:
         assert isinstance(p, RevupArgParser)
@@ -318,7 +338,10 @@ async def main() -> int:
     args = revup_parser.parse_args()
 
     # So users don't accidentally leak their oauth when sharing logs
-    logs.configure_logger(debug=args.verbose, redactions={args.github_oauth: "<GITHUB_OAUTH>"})
+    logs.configure_logger(
+        debug=args.verbose,
+        redactions={args.github_oauth: "<GITHUB_OAUTH>"} if args.github_oauth else {},
+    )
     dump_args(args)
 
     git_ctx = await get_git(args)
