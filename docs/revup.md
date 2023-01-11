@@ -109,34 +109,11 @@ given branch relative to its base branch, then cherry-pick it.
 **revup restack**
 : Reorder the current stack so that commits in a topic are consecutive.
 
+**revup config**
+: Edit configuration and set default values for command flags.
+
 **revup toolkit**
 : Various low-level subfunctionalities intended for advanced users or scripts.
-
-# CONFIGURATION
-Revup stores some persistent configuration values in a python configparser
-compatible format. Any flag or argument to a revup command can be configured.
-Revup loads options the following way, in order of lowest to highest precedence:
-
-- The program has built in defaults that are given in the manual.
-- Repo config is loaded from ".revupconfig" in the root of the current repo.
-- User config is loaded from REVUP_CONFIG_PATH if available, otherwise "~/.revupconfig".
-- User's specified command-line flags.
-
-Each command corresponds to a section in the config file, and each flag
-corresponds to a key with "-" replaced with "_".
-Boolean flags can be negated on the command line by prefixing "--no-" to the
-long form, or "-n" to the short for if it exists.
-
-**Example:**
-The default value for `revup upload --skip-confirm` is `false`. The user
-can override this by adding this section to .revupconfig.
-```
-[upload]
-skip_confirm = True
-```
-If the user then wants to temporarily override their config, they can
-run `revup upload --no-skip-confirm`.
-
 
 # ISSUES
 

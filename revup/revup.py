@@ -160,10 +160,10 @@ def dump_args(args: argparse.Namespace) -> None:
 async def github_connection(
     git_ctx: git.Git, args: argparse.Namespace, conf: config.Config
 ) -> AsyncGenerator[Tuple, None]:
-    from revup import github_real
+    from revup import github_real, github_utils
 
-    repo_info = await git_ctx.get_github_repo_info(
-        github_url=args.github_url, remote_name=args.remote_name
+    repo_info = await github_utils.get_github_repo_info(
+        git_ctx=git_ctx, github_url=args.github_url, remote_name=args.remote_name
     )
 
     if not repo_info.owner or not repo_info.name:
@@ -177,8 +177,8 @@ async def github_connection(
 
     fork_info = repo_info
     if args.fork_name and args.fork_name != args.remote_name:
-        fork_info = await git_ctx.get_github_repo_info(
-            github_url=args.github_url, remote_name=args.fork_name
+        fork_info = await github_utils.get_github_repo_info(
+            git_ctx=git_ctx, github_url=args.github_url, remote_name=args.fork_name
         )
 
     if not fork_info.owner or not fork_info.name:
@@ -194,6 +194,14 @@ async def github_connection(
         raise RuntimeError(
             f'Configured remote fork "{args.fork_info}" is not\n'
             f"the same repo as the remote {args.remote_info}\n"
+        )
+
+    if not args.github_oauth:
+        raise RuntimeError(
+            "No Github OAuth token configured!"
+            "Make one at https://github.com/settings/tokens/new"
+            "(revup needs full repo permissions)"
+            "then set it with `revup config revup.github_oauth`"
         )
 
     github_ep = github_real.RealGitHubEndpoint(
@@ -221,6 +229,10 @@ async def main() -> int:
         add_help=False,
     )
     amend_parser = subparsers.add_parser("amend", aliases=["commit"], add_help=False)
+    config_parser = subparsers.add_parser(
+        "config",
+        add_help=False,
+    )
 
     for p in [upload_parser, restack_parser, amend_parser]:
         # Some args are used by both upload and restack
@@ -264,6 +276,12 @@ async def main() -> int:
     cherry_pick_parser.add_argument("--help", "-h", action=HelpAction, nargs=0)
     cherry_pick_parser.add_argument("branch", nargs=1)
     cherry_pick_parser.add_argument("--base-branch", "-b")
+
+    config_parser.add_argument("--help", "-h", action=HelpAction, nargs=0)
+    config_parser.add_argument("command", nargs=1)
+    config_parser.add_argument("flag", nargs=1)
+    config_parser.add_argument("value", nargs=1)
+    config_parser.add_argument("--repo", "-r")
 
     toolkit_parser = subparsers.add_parser(
         "toolkit", description="Test various subfunctionalities."
@@ -311,6 +329,8 @@ async def main() -> int:
     args = revup_parser.parse_args()
 
     conf = await get_config()
+    if args.cmd == "config":
+        return config.config_main(conf, args)
 
     for p in [revup_parser, amend_parser, cherry_pick_parser, restack_parser, upload_parser]:
         assert isinstance(p, RevupArgParser)
@@ -318,7 +338,10 @@ async def main() -> int:
     args = revup_parser.parse_args()
 
     # So users don't accidentally leak their oauth when sharing logs
-    logs.configure_logger(debug=args.verbose, redactions={args.github_oauth: "<GITHUB_OAUTH>"})
+    logs.configure_logger(
+        debug=args.verbose,
+        redactions={args.github_oauth: "<GITHUB_OAUTH>"} if args.github_oauth else {},
+    )
     dump_args(args)
 
     git_ctx = await get_git(args)
@@ -338,14 +361,6 @@ async def main() -> int:
 
         # "commit" is an alias of "amend --insert"
         args.insert = args.cmd == "commit" or args.insert
-
-        repo_info = await git_ctx.get_github_repo_info(
-            github_url=args.github_url, remote_name=args.remote_name
-        )
-
-        if not repo_info.owner or not repo_info.name:
-            # Don't try to get topics for repos that are not in use with github
-            args.parse_topics = False
 
         return await amend.main(args=args, git_ctx=git_ctx)
 
